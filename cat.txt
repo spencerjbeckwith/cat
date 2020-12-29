@@ -1,4 +1,0 @@
-CAT
-===
-
-Platform game involving two cats named Emily and Jane, fighting an adventure to finally return home, or something.
