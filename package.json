@@ -1,0 +1,10 @@
+{
+  "name": "cat",
+  "version": "1.0.0",
+  "description": "CAT Game for NES",
+  "scripts": {
+    "compile": "nesasm main.asm"
+  },
+  "author": "Spencer Beckwith",
+  "license": "ISC"
+}
