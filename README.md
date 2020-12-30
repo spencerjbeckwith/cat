@@ -55,8 +55,20 @@ I worked out how this will work when I get around to implementing the player: sh
 - Each value possible in each nybble corresponds to a "stage" of velocity, which will then be referenced into a table of pixel movement values. This also changes depending on the frame count (0-3) so some frames will have more movement if in a different frame index. This simulates fractional movement even though every possible X value has to be a whole number.
 - There will be two more bytes, a X counter and Y counter. These are set according to input and the stage of velocity horizontally and vertically, and will count down to 0. When hitting zero, the stage will then change to the next, either up or down, depending on direction and input, etc. This simulates acceleration. The first few stages will take less time to reach than the later stages, representing that moving faster takes longer to get going *and* slow down.
 
+Also, the player reserves sprites 1, 2, 3, and 4. Not sprite 0 in case I want to use a sprite 0 hit later.
+
+Player Properties Byte:
+- Bit 0, bit 1, bit 2: determine the players state.
+- Bit 3, bit 4, bit 5: determine the player image to show
+- More bits...?
+
+## Input
+There are six variables in the zero-page that keep track of both gamepad's held, pressed, and released status. To check, use the macro `button_check` with the arguments: input variable, button constant, and the label to jump to if the check passes.
+To convert code to check from p1 to p2, simply add 3 to the variable you're checking (or use the other constant)
+
 ## Do next:
-- Read controller input
+- Make GetSpeedDelta macro
+- Make Y acceleration/movement for player
 - Make macro that'll write to our PPU buffer
 - Begin player
     - Attribute byte
@@ -65,4 +77,6 @@ I worked out how this will work when I get around to implementing the player: sh
 - Write subroutines to bankswitch and play sound/music properly
     - Also, implement the necessary initializing code in reset routine
 - Add RNG include
+- How to make P2 control the player?
+    - Also don't forget to do a palette swap for that
 - PLAN what you're making you numbnutz

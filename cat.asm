@@ -7,6 +7,16 @@
 STATE_PLAYING = $00
 ;   Add more states here
 
+; Inputs
+BUTTON_A        = %10000000
+BUTTON_B        = %01000000
+BUTTON_SELECT   = %00100000
+BUTTON_START    = %00010000
+BUTTON_UP       = %00001000
+BUTTON_DOWN     = %00000100
+BUTTON_LEFT     = %00000010
+BUTTON_RIGHT    = %00000001
+
 ; Variables
 ;   These addresses cannot be re-used for more than one purpose.
 game_asleep         = $00
@@ -16,8 +26,16 @@ ppu_buffer_scratch  = $03 ; *could* be re-used, outside of NMI
 game_state          = $04
 game_state_initialized  = $05
 FT_TEMP             = $06 ; Reserves 06, 07, and 08 for FamiTone
-input               = $09
-; More here - saving up to $1f for now
+input1              = $09 ; 09 to 0e are to be checked via the button_check macro.
+input1_pressed      = $0a ;     So obviously, don't re-use.
+input1_released     = $0b
+input2              = $0c
+input2_pressed      = $0d
+input2_released     = $0e
+input1_lastframe    = $0f ; 0f and 10 are used to calculate new button presses/released
+input2_lastframe    = $10 ;     Don't try to check these, but the *_pressed etc. variables above.
+game_frame          = $11 ; Will be from 0 to 3
+; More here - reserving up to $1f for now
 
 ;   These addresses could, hypothetically, be re-used.
 pointer_low     = $20 ; can be re-used
@@ -31,6 +49,7 @@ player_velocity     = $42
 player_properties   = $43
 player_xcount       = $44
 player_ycount       = $45
+player_scratch      = $46
 
 ;   Reserved addresses outside of zero-page
 bcdNum      = $0300 ; Reserves 0300 and 0301 for BCD
@@ -76,6 +95,17 @@ CHR:
 
 ; Make macros include file
 
+    .macro button_check ; (input variable, button constant, new label to jump)
+    lda \1
+    and \2  ; Get just the bit we want
+    cmp \2  ; Compare it
+    bne .m\@ ; Not equal, move on
+        jmp \3 ; If equal, jump to thidd argument
+.m\@:
+    .endm
+
+    ; Make ppu macro
+
 ; PPU Buffer write macro
 
 ; Make subroutines include file
@@ -86,6 +116,51 @@ Bankswitch:
 BankswitchNoSave:
     lda Banktable, y
     sta Banktable, y
+    rts
+
+Controller1:
+    ; Loads the input state for controller 1.
+    ; Places the state into input1.
+    ;   Call this multiple times when using DMCA?
+    lda #$01
+    sta $4016 ; Poll controller
+    sta input1 ; Start input at 00000001
+
+    lda #$00
+    sta $4016 ; Stop polling
+.loop:
+    lda $4016   ; Load next button
+    lsr a       ; Move this button read into carry
+    rol input1  ; Move that button from carry into our buttons
+    bcc .loop   ; Branch back if carry is clear. Carry will not be clear after 8 reads - our first bit made it back around
+    rts
+
+Controller2:
+    ; Loads the input state for controller 2.
+    ; Places the state into input2.
+    ;   Same process as Controller1.
+    lda #$01
+    sta $4016 ; Poll controller
+    sta input2 ; Start input at 00000001
+
+    lda #$00
+    sta $4016 ; Stop polling
+.loop:
+    lda $4017   ; Load next button
+    lsr a       ; Move this button read into carry
+    rol input2  ; Move that button from carry into our buttons
+    bcc .loop   ; Branch back if carry is clear. Carry will not be clear after 8 reads - our first bit made it back around
+    rts
+
+FrameCount:
+    ; Count frame from 0 to 3
+    ldx game_frame
+    inx
+    cpx #$04
+    bne .fdone
+        ldx #$00
+.fdone:
+    stx game_frame
     rts
 
 ; Sound subroutines here
@@ -180,8 +255,59 @@ WaitForFrame:
     bne .loop
 DoFrame: ; When we get here, we know NMI is done and we can do logic for whatever time is left.
 
-    ; Load controller state here
-    
+    ; Load controller state - until we get two matching results in a row, because we'll be using DCPM
+    jsr Controller1
+.readc1:
+    lda input1
+    pha             ; Put current input on stack
+    jsr Controller1 ; Test it again
+    pla             ; Pull last input off the stack
+    cmp input1      ; Compare to last pull
+    bne .readc1     ; If they aren't the same, do it again
+
+    ; Now do it for controller 2 - this is the same as above.
+    jsr Controller2
+.readc2:
+    lda input2
+    pha
+    jsr Controller2
+    pla
+    cmp input2
+    bne .readc2
+
+    ; Calculate pressed/released buttons
+    lda input1
+    eor #$ff                ; Invert current buttons
+    and input1_lastframe    ; AND with our buttons last frame
+    sta input1_released     ; Those are our released
+
+    lda input1_lastframe    
+    eor #$ff                ; Invert last frame buttons
+    and input1              ; AND with our current buttons
+    sta input1_pressed      ; Those are our pressed
+
+    ; Do it again for second controller. This is the same as above.
+    ;   You know, it would be trivial to combine all the p2 code into one loop with p1.
+    ;   Maybe later. It would only save me a handful of bytes which isn't necessary yet, I don't think.
+    lda input2
+    eor #$ff
+    and input2_lastframe
+    sta input2_released
+
+    lda input2_lastframe    
+    eor #$ff
+    and input2
+    sta input2_pressed
+
+    ; Update our last frames
+    lda input1
+    sta input1_lastframe
+    lda input2
+    sta input2_lastframe
+
+    ; Do our frame counter
+    jsr FrameCount
+
     ; When your state is done, do: jmp WaitForFrame
 
     ; First, see if our state needs to be initialized.
@@ -350,10 +476,23 @@ StateInitJumpTable:
 StateJumpTable:
     .db low(StatePlaying), high(StatePlaying)
 
-    .org $f000 ; If you change this, don't forget to change at the start of the file
-DPCM:
-    ; DPCM bin data goes here?
-    ; I'm not totally certain on this.
+XCountTable:
+; xcount and ycount are the number of frames it takes to change the velocity away from the indicated stage.
+;(value)  0    1    2    3    4    5    6    7    8    9    a    b    c    d    e    f - In velocity nybble
+; Stage:  0    1    2    3    4    5    6    7   -7   -6   -5   -4   -3   -2   -1   -0
+    .db $02, $04, $06, $08, $0a, $0c, $0e, $12, $12, $0e, $0c, $0a, $08, $06, $04, $02
+YCountTable:
+; Stage:  0    1    2    3    4    5    6    7   -7   -6   -5   -4   -3   -2   -1   -0
+    .db $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10
+DeltaTableX:
+; These are signed 1-byte values indicating how far to move the player based on the frame and its H velocity stage
+; Stage:  0    1    2    3    4    5    6    7   -7   -6   -5   -4   -3   -2   -1   -0
+    .db $00, $01, $01, $01, $01, $02, $02, $02, $fe, $fe, $fe, $ff, $ff, $ff, $ff, $00 ; Frame 0
+    .db $00, $00, $00, $01, $01, $01, $01, $02, $fe, $ff, $ff, $ff, $ff, $00, $00, $00 ; Frame 1
+    .db $00, $00, $01, $01, $01, $01, $02, $02, $fe, $fe, $ff, $ff, $ff, $ff, $00, $00 ; Frame 2
+    .db $00, $00, $00, $00, $01, $01, $01, $02, $fe, $ff, $ff, $ff, $00, $00, $00, $00 ; Frame 3
+;DeltaTableY
+;   ...
 
 Palettes:
     ; Nametable
@@ -367,6 +506,11 @@ Palettes:
     .db $0f, $07, $17, $27 ;5
     .db $0f, $30, $16, $10 ;6
     .db $0f, $00, $10, $20 ;7
+
+    .org $f000 ; If you change this, don't forget to change at the start of the file
+DPCM:
+    ; DPCM bin data goes here?
+    ; I'm not totally certain on this.
 
     .org $fffa ; Vectors
     .dw NMI
