@@ -61,6 +61,21 @@ PLAYERSPRITE4_X = $0213
         sta player_velocity ; Store
     .endm
 
+GetSpeedDeltaX:
+    ; A should be equal to our current speed stage.
+    ; Sets A to the new speed delta to use this frame.
+    sta player_scratch  ; Save the stage
+    lda game_frame      ; Load our frame
+    asl a               ; Multiply frame by 16 - get the right table row
+    asl a
+    asl a
+    asl a
+    clc
+    adc player_scratch  ; Add our stage - get the right table column
+    tax                 ; Put it into X
+    lda DeltaTableX, x  ; Load from the table
+    rts
+
 PlayerInit:
     ; Set initial values
     lda #$7f        ; You'll want X and Y to change later
@@ -128,10 +143,18 @@ PlayerStepAccelerate:
     GetXVelocity
     cmp #%00000000      ; 0 in right direction
     bne .1              ; We do this to avoid page limit on branches
+        lda player_properties
+        and #%11110111  ; Unset image
+        sta player_properties
+
         jmp .CheckYCount
 .1:
     cmp #%00001111      ; 0 in left direction
     bne .2
+        lda player_properties
+        and #%11110111  ; Unset image
+        sta player_properties
+
         jmp .CheckYCount
 .2:
 
@@ -186,6 +209,11 @@ PlayerStepAccelerate:
     lda XCountTable, x
     sta player_xcount
 
+    ; Flip our current image
+    lda player_properties
+    eor #%00001000          ; Flip just least-significant image bit
+    sta player_properties   ; Store
+
     ; Continue straight into ycount below...
 .CheckYCount:
     lda player_ycount   ; Check y count
@@ -200,8 +228,17 @@ PlayerStepAccelerate:
 PlayerStepMove:
 
     ; Get X speed delta based on deltatablex
-    ; Check for collisions
-    ; Change X
+    GetXVelocity
+    jsr GetSpeedDeltaX
+    sta player_scratch  ; Put into our scratch
+
+    ; Check for collisions here
+    
+    ; Add it to current X
+    lda player_x
+    clc
+    adc player_scratch
+    sta player_x
 
     ; Get Y speed delta based on deltatabley
     ; Check for collisions
@@ -210,19 +247,37 @@ PlayerStepMove:
     ; Continue straight into animation below...
 PlayerStepAnimate:
 
+    ; Check if we're on the ground here
+
     ; Continue straight into update OAM...
 PlayerStepUpdate:
     ; Make sure to call this if you want your state to make any change visible on screen!
 
     ; Set correct position of all four sections
-    lda player_x    ; Place sections 2 and 4 at x, 1 and 3 at x - 8
-    sta PLAYERSPRITE2_X
-    sta PLAYERSPRITE4_X
-    sec
-    sbc #$08
-    sta PLAYERSPRITE1_X
-    sta PLAYERSPRITE3_X
 
+    ; For X: swap left and right sides if we are facing left.
+    lda player_velocity
+    and #%00001000 ; Get just horizontal sign
+    cmp #%00001000 ; Compare
+    beq .facingLeft
+        ;If we got here, we are facing right.
+        lda player_x    ; Place sections 2 and 4 at x, 1 and 3 at x - 8
+        sta PLAYERSPRITE2_X
+        sta PLAYERSPRITE4_X
+        sec
+        sbc #$08
+        sta PLAYERSPRITE1_X
+        sta PLAYERSPRITE3_X
+        jmp .yy
+.facingLeft:
+        lda player_x    ; Place sections 1 and 3 at x, 2 and 4 at x - 8
+        sta PLAYERSPRITE1_X
+        sta PLAYERSPRITE3_X
+        sec
+        sbc #$08
+        sta PLAYERSPRITE2_X
+        sta PLAYERSPRITE4_X
+.yy:
     lda player_y    ; Place sections 1 and 2 at y, 3 and 4 at y + 8
     sta PLAYERSPRITE1_Y
     sta PLAYERSPRITE2_Y
@@ -250,7 +305,11 @@ PlayerStepUpdate:
     stx PLAYERSPRITE4_T
 
     ; Set correct mirroring/palette for all four sections
-    lda #%00000000
+    lda player_velocity
+    and #%00001000  ; Get just horizontal sign
+    asl a
+    asl a           ; Put it into bit 6 for attributes
+    asl a
     sta PLAYERSPRITE1_A
     sta PLAYERSPRITE2_A
     sta PLAYERSPRITE3_A

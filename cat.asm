@@ -480,17 +480,17 @@ XCountTable:
 ; xcount and ycount are the number of frames it takes to change the velocity away from the indicated stage.
 ;(value)  0    1    2    3    4    5    6    7    8    9    a    b    c    d    e    f - In velocity nybble
 ; Stage:  0    1    2    3    4    5    6    7   -7   -6   -5   -4   -3   -2   -1   -0
-    .db $02, $04, $06, $08, $0a, $0c, $0e, $12, $12, $0e, $0c, $0a, $08, $06, $04, $02
+    .db $05, $05, $05, $04, $04, $04, $03, $08, $08, $03, $04, $04, $04, $05, $05, $05
 YCountTable:
 ; Stage:  0    1    2    3    4    5    6    7   -7   -6   -5   -4   -3   -2   -1   -0
     .db $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10, $10
 DeltaTableX:
 ; These are signed 1-byte values indicating how far to move the player based on the frame and its H velocity stage
 ; Stage:  0    1    2    3    4    5    6    7   -7   -6   -5   -4   -3   -2   -1   -0
-    .db $00, $01, $01, $01, $01, $02, $02, $02, $fe, $fe, $fe, $ff, $ff, $ff, $ff, $00 ; Frame 0
-    .db $00, $00, $00, $01, $01, $01, $01, $02, $fe, $ff, $ff, $ff, $ff, $00, $00, $00 ; Frame 1
-    .db $00, $00, $01, $01, $01, $01, $02, $02, $fe, $fe, $ff, $ff, $ff, $ff, $00, $00 ; Frame 2
-    .db $00, $00, $00, $00, $01, $01, $01, $02, $fe, $ff, $ff, $ff, $00, $00, $00, $00 ; Frame 3
+    .db $00, $01, $01, $02, $02, $02, $02, $03, $fd, $fe, $fe, $fe, $fe, $ff, $ff, $00 ; Frame 0
+    .db $00, $01, $01, $01, $01, $02, $02, $02, $fe, $fe, $fe, $ff, $ff, $ff, $ff, $00 ; Frame 1
+    .db $00, $01, $01, $01, $02, $02, $02, $02, $fe, $fe, $fe, $fe, $ff, $ff, $ff, $00 ; Frame 2
+    .db $00, $00, $01, $01, $01, $01, $02, $02, $fe, $fe, $ff, $ff, $ff, $ff, $00, $00 ; Frame 3
 ;DeltaTableY
 ;   ...
 
